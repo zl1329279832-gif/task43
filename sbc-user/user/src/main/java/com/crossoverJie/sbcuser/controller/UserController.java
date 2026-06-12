@@ -189,6 +189,17 @@ public class UserController implements UserService {
         // 4. Feign 调用订单服务 (Hystrix 自动降级)
         logger.info("calling order service createOrder, reqNo={}", reqNo);
         BaseResponse<CreateOrderResVO> orderResponse = orderServiceClient.createOrder(orderReq);
+
+        // 4.1 防御性 null 检查 (极端情况: Feign 本身异常未被 fallback 兜住)
+        if (orderResponse == null) {
+            logger.error("order service returned null response, reqNo={}", reqNo);
+            BaseResponse<UserCreateOrderResVO> fallbackRes = new BaseResponse<>();
+            fallbackRes.setReqNo(reqNo);
+            fallbackRes.setCode(StatusEnum.FALLBACK.getCode());
+            fallbackRes.setMessage("订单服务返回异常，请稍后重试");
+            return fallbackRes;
+        }
+
         logger.info("order service response: code={}, message={}", orderResponse.getCode(), orderResponse.getMessage());
 
         // 5. 判断订单服务是否降级
@@ -237,10 +248,16 @@ public class UserController implements UserService {
 
         @Override
         public void run() {
-
-            BaseResponse<OrderNoResVO> orderNo = orderServiceClient.getOrderNoCommonLimit(vo);
-            logger.info("远程返回:" + JSON.toJSONString(orderNo));
-
+            try {
+                BaseResponse<OrderNoResVO> orderNo = orderServiceClient.getOrderNoCommonLimit(vo);
+                if (orderNo == null) {
+                    logger.error("getOrderNoCommonLimit returned null for reqNo={}", vo.getReqNo());
+                    return;
+                }
+                logger.info("远程返回:" + JSON.toJSONString(orderNo));
+            } catch (Exception e) {
+                logger.error("Worker execution failed for reqNo={}", vo.getReqNo(), e);
+            }
         }
     }
 

@@ -111,76 +111,94 @@ public class OrderController implements OrderService{
 
     /**
      * 创建订单
-     * 复用 sbc-request-check 去重思想: 同一 reqNo 重复提交返回同一订单
+     * 幂等保证: 使用 ConcurrentHashMap.putIfAbsent 原子占位，同 reqNo 并发只能落一笔
      */
     @Override
     public BaseResponse<CreateOrderResVO> createOrder(@RequestBody CreateOrderReqVO req) {
         LOGGER.info("createOrder request: {}", req);
 
-        // 请求号校验 (复用 sbc-request-check 模块的去重逻辑)
+        // 请求号校验
         String reqNo = req.getReqNo();
         if (reqNo == null || reqNo.trim().isEmpty()) {
             throw new SBCException(StatusEnum.REPEAT_REQUEST.getCode(), "请求号不能为空");
         }
 
-        // 重复提交返回同一订单 (幂等保证)
-        BaseResponse<CreateOrderResVO> cached = REQ_NO_CACHE.get(reqNo);
-        if (cached != null) {
+        // ========== 原子幂等防护 ==========
+        // 占位符: 标记该 reqNo 正在处理中 (防止并发穿透)
+        BaseResponse<CreateOrderResVO> processing = new BaseResponse<>();
+        processing.setCode("PROCESSING");
+
+        BaseResponse<CreateOrderResVO> existing = REQ_NO_CACHE.putIfAbsent(reqNo, processing);
+        if (existing != null) {
+            if ("PROCESSING".equals(existing.getCode())) {
+                // 另一个线程正在用同一 reqNo 创建订单 → 拒绝并发重复
+                LOGGER.warn("并发重复请求被拒绝, reqNo={}", reqNo);
+                throw new SBCException(StatusEnum.REPEAT_REQUEST.getCode(), "请求正在处理中，请勿重复提交");
+            }
+            // 已有成功结果 → 幂等返回同一订单
             LOGGER.info("重复请求 reqNo={}, 返回已有订单", reqNo);
-            return cached;
+            return existing;
         }
 
-        // 参数校验
-        if (req.getUserId() == null) {
-            throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "用户ID不能为空");
+        // 本线程抢到创建权，try/catch 保证失败时移除占位符
+        try {
+            // 参数校验
+            if (req.getUserId() == null) {
+                throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "用户ID不能为空");
+            }
+            if (req.getProductName() == null || req.getProductName().trim().isEmpty()) {
+                throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "商品名称不能为空");
+            }
+            if (req.getUnitPrice() == null || req.getUnitPrice() <= 0) {
+                throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "商品单价必须大于0");
+            }
+            if (req.getQuantity() == null || req.getQuantity() <= 0) {
+                throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "购买数量必须大于0");
+            }
+
+            // 生成订单号
+            String orderNo = DateUtil.getLongTime() + "" + ORDER_SEQ.incrementAndGet();
+
+            // 构建订单
+            Order order = new Order();
+            order.setOrderNo(orderNo);
+            order.setUserId(req.getUserId());
+            order.setProductName(req.getProductName());
+            order.setUnitPrice(req.getUnitPrice());
+            order.setQuantity(req.getQuantity());
+            order.setTotalPrice(req.getUnitPrice() * req.getQuantity());
+            order.setStatus("COMPLETED");
+            order.setCreateTime(DateUtil.getDateStr(DateUtil.getLongTime() * 1000));
+            order.setReqNo(reqNo);
+
+            // 存储订单
+            ORDER_STORE.put(orderNo, order);
+
+            // 构建响应
+            CreateOrderResVO resVO = new CreateOrderResVO();
+            resVO.setOrderNo(order.getOrderNo());
+            resVO.setUserId(order.getUserId());
+            resVO.setProductName(order.getProductName());
+            resVO.setUnitPrice(order.getUnitPrice());
+            resVO.setQuantity(order.getQuantity());
+            resVO.setTotalPrice(order.getTotalPrice());
+            resVO.setStatus(order.getStatus());
+            resVO.setCreateTime(order.getCreateTime());
+
+            BaseResponse<CreateOrderResVO> response = BaseResponse.createSuccess(resVO, "订单创建成功");
+            response.setReqNo(reqNo);
+
+            // 替换占位符为真实响应 (供后续同 reqNo 幂等返回)
+            REQ_NO_CACHE.put(reqNo, response);
+
+            LOGGER.info("createOrder success: orderNo={}, reqNo={}", orderNo, reqNo);
+            return response;
+        } catch (Exception e) {
+            // 创建失败 → 移除占位符，允许同 reqNo 重试
+            REQ_NO_CACHE.remove(reqNo);
+            LOGGER.error("createOrder failed, reqNo={}, removing placeholder", reqNo, e);
+            throw e;
         }
-        if (req.getProductName() == null || req.getProductName().trim().isEmpty()) {
-            throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "商品名称不能为空");
-        }
-        if (req.getUnitPrice() == null || req.getUnitPrice() <= 0) {
-            throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "商品单价必须大于0");
-        }
-        if (req.getQuantity() == null || req.getQuantity() <= 0) {
-            throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "购买数量必须大于0");
-        }
-
-        // 生成订单号
-        String orderNo = DateUtil.getLongTime() + "" + ORDER_SEQ.incrementAndGet();
-
-        // 构建订单
-        Order order = new Order();
-        order.setOrderNo(orderNo);
-        order.setUserId(req.getUserId());
-        order.setProductName(req.getProductName());
-        order.setUnitPrice(req.getUnitPrice());
-        order.setQuantity(req.getQuantity());
-        order.setTotalPrice(req.getUnitPrice() * req.getQuantity());
-        order.setStatus("COMPLETED");
-        order.setCreateTime(DateUtil.getDateStr(DateUtil.getLongTime() * 1000));
-        order.setReqNo(reqNo);
-
-        // 存储订单
-        ORDER_STORE.put(orderNo, order);
-
-        // 构建响应
-        CreateOrderResVO resVO = new CreateOrderResVO();
-        resVO.setOrderNo(order.getOrderNo());
-        resVO.setUserId(order.getUserId());
-        resVO.setProductName(order.getProductName());
-        resVO.setUnitPrice(order.getUnitPrice());
-        resVO.setQuantity(order.getQuantity());
-        resVO.setTotalPrice(order.getTotalPrice());
-        resVO.setStatus(order.getStatus());
-        resVO.setCreateTime(order.getCreateTime());
-
-        BaseResponse<CreateOrderResVO> response = BaseResponse.createSuccess(resVO, "订单创建成功");
-        response.setReqNo(reqNo);
-
-        // 缓存结果，用于重复提交返回同一订单
-        REQ_NO_CACHE.put(reqNo, response);
-
-        LOGGER.info("createOrder success: orderNo={}, reqNo={}", orderNo, reqNo);
-        return response;
     }
 
     /**

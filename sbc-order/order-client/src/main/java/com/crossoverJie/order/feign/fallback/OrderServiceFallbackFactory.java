@@ -48,12 +48,26 @@ public class OrderServiceFallbackFactory implements FallbackFactory<OrderService
 
             @Override
             public BaseResponse<OrderNoResVO> getOrderNoLimit(@RequestBody OrderNoReqVO orderNoReq) {
-                return null;
+                LOGGER.error("getOrderNoLimit fallback:" + throwable);
+                BaseResponse<OrderNoResVO> baseResponse = new BaseResponse<>();
+                OrderNoResVO vo = new OrderNoResVO();
+                vo.setOrderId(0L);
+                baseResponse.setDataBody(vo);
+                baseResponse.setCode(StatusEnum.FALLBACK.getCode());
+                baseResponse.setMessage(StatusEnum.FALLBACK.getMessage());
+                return baseResponse;
             }
 
             @Override
             public BaseResponse<OrderNoResVO> getOrderNoCommonLimit(@RequestBody OrderNoReqVO orderNoReq) {
-                return null;
+                LOGGER.error("getOrderNoCommonLimit fallback:" + throwable);
+                BaseResponse<OrderNoResVO> baseResponse = new BaseResponse<>();
+                OrderNoResVO vo = new OrderNoResVO();
+                vo.setOrderId(0L);
+                baseResponse.setDataBody(vo);
+                baseResponse.setCode(StatusEnum.FALLBACK.getCode());
+                baseResponse.setMessage(StatusEnum.FALLBACK.getMessage());
+                return baseResponse;
             }
 
             @Override

@@ -52,6 +52,9 @@ public class OrderController implements OrderService{
     /** 请求号去重缓存: reqNo -> 已创建的订单响应 (复用 sbc-request-check 去重思想) */
     private static final Map<String, BaseResponse<CreateOrderResVO>> REQ_NO_CACHE = new ConcurrentHashMap<>();
 
+    /** 请求号维度锁: 保证同一 reqNo 并发只有一个线程执行创建 */
+    private static final ConcurrentHashMap<String, Object> REQ_LOCKS = new ConcurrentHashMap<>();
+
     @Override
     @CheckReqNo
     public BaseResponse<OrderNoResVO> getOrderNo(@RequestBody OrderNoReqVO orderNoReq) {
@@ -123,14 +126,14 @@ public class OrderController implements OrderService{
             throw new SBCException(StatusEnum.REPEAT_REQUEST.getCode(), "请求号不能为空");
         }
 
-        // 重复提交返回同一订单 (幂等保证)
+        // 快速路径: 无锁读已完成的缓存
         BaseResponse<CreateOrderResVO> cached = REQ_NO_CACHE.get(reqNo);
         if (cached != null) {
             LOGGER.info("重复请求 reqNo={}, 返回已有订单", reqNo);
             return cached;
         }
 
-        // 参数校验
+        // 参数校验 (无状态, 放在锁外)
         if (req.getUserId() == null) {
             throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "用户ID不能为空");
         }
@@ -144,43 +147,54 @@ public class OrderController implements OrderService{
             throw new SBCException(StatusEnum.VALIDATION_FAIL.getCode(), "购买数量必须大于0");
         }
 
-        // 生成订单号
-        String orderNo = DateUtil.getLongTime() + "" + ORDER_SEQ.incrementAndGet();
+        // 按 reqNo 粒度加锁, 保证同一 reqNo 并发只落一笔
+        Object lock = REQ_LOCKS.computeIfAbsent(reqNo, k -> new Object());
+        synchronized (lock) {
+            // double-check: 另一个线程可能已经创建完成
+            cached = REQ_NO_CACHE.get(reqNo);
+            if (cached != null) {
+                LOGGER.info("重复请求 reqNo={}, 返回已有订单(并发)", reqNo);
+                return cached;
+            }
 
-        // 构建订单
-        Order order = new Order();
-        order.setOrderNo(orderNo);
-        order.setUserId(req.getUserId());
-        order.setProductName(req.getProductName());
-        order.setUnitPrice(req.getUnitPrice());
-        order.setQuantity(req.getQuantity());
-        order.setTotalPrice(req.getUnitPrice() * req.getQuantity());
-        order.setStatus("COMPLETED");
-        order.setCreateTime(DateUtil.getDateStr(DateUtil.getLongTime() * 1000));
-        order.setReqNo(reqNo);
+            // 生成订单号
+            String orderNo = DateUtil.getLongTime() + "" + ORDER_SEQ.incrementAndGet();
 
-        // 存储订单
-        ORDER_STORE.put(orderNo, order);
+            // 构建订单
+            Order order = new Order();
+            order.setOrderNo(orderNo);
+            order.setUserId(req.getUserId());
+            order.setProductName(req.getProductName());
+            order.setUnitPrice(req.getUnitPrice());
+            order.setQuantity(req.getQuantity());
+            order.setTotalPrice(req.getUnitPrice() * req.getQuantity());
+            order.setStatus("COMPLETED");
+            order.setCreateTime(DateUtil.getDateStr(DateUtil.getLongTime() * 1000));
+            order.setReqNo(reqNo);
 
-        // 构建响应
-        CreateOrderResVO resVO = new CreateOrderResVO();
-        resVO.setOrderNo(order.getOrderNo());
-        resVO.setUserId(order.getUserId());
-        resVO.setProductName(order.getProductName());
-        resVO.setUnitPrice(order.getUnitPrice());
-        resVO.setQuantity(order.getQuantity());
-        resVO.setTotalPrice(order.getTotalPrice());
-        resVO.setStatus(order.getStatus());
-        resVO.setCreateTime(order.getCreateTime());
+            // 存储订单
+            ORDER_STORE.put(orderNo, order);
 
-        BaseResponse<CreateOrderResVO> response = BaseResponse.createSuccess(resVO, "订单创建成功");
-        response.setReqNo(reqNo);
+            // 构建响应
+            CreateOrderResVO resVO = new CreateOrderResVO();
+            resVO.setOrderNo(order.getOrderNo());
+            resVO.setUserId(order.getUserId());
+            resVO.setProductName(order.getProductName());
+            resVO.setUnitPrice(order.getUnitPrice());
+            resVO.setQuantity(order.getQuantity());
+            resVO.setTotalPrice(order.getTotalPrice());
+            resVO.setStatus(order.getStatus());
+            resVO.setCreateTime(order.getCreateTime());
 
-        // 缓存结果，用于重复提交返回同一订单
-        REQ_NO_CACHE.put(reqNo, response);
+            BaseResponse<CreateOrderResVO> response = BaseResponse.createSuccess(resVO, "订单创建成功");
+            response.setReqNo(reqNo);
 
-        LOGGER.info("createOrder success: orderNo={}, reqNo={}", orderNo, reqNo);
-        return response;
+            // 缓存结果，用于重复提交返回同一订单
+            REQ_NO_CACHE.put(reqNo, response);
+
+            LOGGER.info("createOrder success: orderNo={}, reqNo={}", orderNo, reqNo);
+            return response;
+        }
     }
 
     /**

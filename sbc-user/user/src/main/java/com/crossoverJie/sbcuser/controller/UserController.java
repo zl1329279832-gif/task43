@@ -237,10 +237,12 @@ public class UserController implements UserService {
 
         @Override
         public void run() {
-
-            BaseResponse<OrderNoResVO> orderNo = orderServiceClient.getOrderNoCommonLimit(vo);
-            logger.info("远程返回:" + JSON.toJSONString(orderNo));
-
+            try {
+                BaseResponse<OrderNoResVO> orderNo = orderServiceClient.getOrderNoCommonLimit(vo);
+                logger.info("远程返回:" + JSON.toJSONString(orderNo));
+            } catch (Exception e) {
+                logger.error("调用订单服务异常", e);
+            }
         }
     }
 

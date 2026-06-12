@@ -1,8 +1,14 @@
 package com.crossoverJie.order.api;
 
+import com.crossoverJie.order.vo.req.CreateOrderReqVO;
 import com.crossoverJie.order.vo.req.OrderNoReqVO;
+import com.crossoverJie.order.vo.req.OrderQueryReqVO;
+import com.crossoverJie.order.vo.req.UserOrderQueryReqVO;
+import com.crossoverJie.order.vo.res.CreateOrderResVO;
 import com.crossoverJie.order.vo.res.OrderNoResVO;
 import com.crossoverJie.sbcorder.common.res.BaseResponse;
+
+import java.util.List;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.validation.annotation.Validated;
@@ -50,4 +56,31 @@ public interface OrderService {
     @ApiOperation("通用限流获取订单号")
     @RequestMapping(value = "/getOrderNoCommonLimit", method = RequestMethod.POST)
     BaseResponse<OrderNoResVO> getOrderNoCommonLimit(@RequestBody OrderNoReqVO orderNoReq) ;
+
+    /**
+     * 创建订单
+     * @param req
+     * @return
+     */
+    @ApiOperation("创建订单")
+    @RequestMapping(value = "/createOrder", method = RequestMethod.POST)
+    BaseResponse<CreateOrderResVO> createOrder(@RequestBody CreateOrderReqVO req);
+
+    /**
+     * 按订单号查询订单
+     * @param req
+     * @return
+     */
+    @ApiOperation("按订单号查询订单")
+    @RequestMapping(value = "/getOrderByOrderNo", method = RequestMethod.POST)
+    BaseResponse<CreateOrderResVO> getOrderByOrderNo(@RequestBody OrderQueryReqVO req);
+
+    /**
+     * 按用户ID查询订单列表
+     * @param req
+     * @return
+     */
+    @ApiOperation("按用户ID查询订单列表")
+    @RequestMapping(value = "/getOrdersByUserId", method = RequestMethod.POST)
+    BaseResponse<List<CreateOrderResVO>> getOrdersByUserId(@RequestBody UserOrderQueryReqVO req);
 }

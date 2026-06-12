@@ -3,7 +3,9 @@ package com.crossoverJie.user.feign.api;
 import com.crossoverJie.order.vo.res.OrderNoResVO;
 import com.crossoverJie.sbcorder.common.res.BaseResponse;
 import com.crossoverJie.user.api.UserService;
+import com.crossoverJie.user.vo.req.UserCreateOrderReqVO;
 import com.crossoverJie.user.vo.req.UserReqVO;
+import com.crossoverJie.user.vo.res.UserCreateOrderResVO;
 import com.crossoverJie.user.vo.res.UserResVO;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.cloud.netflix.feign.FeignClient;
@@ -45,4 +47,9 @@ public interface UserServiceClient extends UserService{
     @ApiOperation("hystrix容错调用")
     @RequestMapping(value = "/getUserByHystrix", method = RequestMethod.POST)
     BaseResponse<OrderNoResVO> getUserByHystrix(@RequestBody UserReqVO userReqVO) ;
+
+    @Override
+    @ApiOperation("用户下单")
+    @RequestMapping(value = "/createOrder", method = RequestMethod.POST)
+    BaseResponse<UserCreateOrderResVO> createOrderForUser(@RequestBody UserCreateOrderReqVO req) ;
 }

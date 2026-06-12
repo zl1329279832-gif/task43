@@ -1,5 +1,6 @@
 package com.crossoverjie.gateway.zuul.conf;
 
+import com.crossoverjie.gateway.zuul.filter.HeaderPassthroughFilter;
 import com.crossoverjie.gateway.zuul.filter.RequestFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,5 +20,10 @@ public class FilterConf {
     @Bean
     public RequestFilter filter(){
         return  new RequestFilter() ;
+    }
+
+    @Bean
+    public HeaderPassthroughFilter headerPassthroughFilter(){
+        return new HeaderPassthroughFilter();
     }
 }

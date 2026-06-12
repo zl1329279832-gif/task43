@@ -14,13 +14,11 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class OrderConfig {
-    //// FIXME: 26/04/2018 为了方便测试，先把降级关掉
-    //@Bean
+    @Bean
     public OrderServiceFallBack fallBack(){
         return new OrderServiceFallBack();
     }
-    //// FIXME: 26/04/2018 为了方便测试，先把降级关掉
-    //@Bean
+    @Bean
     public OrderServiceFallbackFactory factory(){
         return new OrderServiceFallbackFactory();
     }

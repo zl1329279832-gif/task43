@@ -51,6 +51,26 @@ public class RequestFilter extends ZuulFilter {
         }
         logger.info("token ={}",token) ;
 
+        // 透传请求号reqNo到下游服务
+        String reqNo = request.getParameter("reqNo");
+        if (reqNo == null) {
+            reqNo = request.getHeader("reqNo");
+        }
+        if (!StringUtil.isEmpty(reqNo)) {
+            currentContext.addZuulRequestHeader("reqNo", reqNo);
+            logger.info("透传reqNo={}", reqNo);
+        }
+
+        // 透传用户标识userId到下游服务
+        String userId = request.getParameter("userId");
+        if (userId == null) {
+            userId = request.getHeader("userId");
+        }
+        if (!StringUtil.isEmpty(userId)) {
+            currentContext.addZuulRequestHeader("userId", userId);
+            logger.info("透传userId={}", userId);
+        }
+
         return null;
     }
 }

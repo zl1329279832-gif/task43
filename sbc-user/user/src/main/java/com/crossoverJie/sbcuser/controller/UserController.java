@@ -2,13 +2,18 @@ package com.crossoverJie.sbcuser.controller;
 
 import com.alibaba.fastjson.JSON;
 import com.crossoverJie.order.feign.api.OrderServiceClient;
+import com.crossoverJie.order.vo.req.CreateOrderReqVO;
 import com.crossoverJie.order.vo.req.OrderNoReqVO;
+import com.crossoverJie.order.vo.res.OrderDetailResVO;
 import com.crossoverJie.order.vo.res.OrderNoResVO;
 import com.crossoverJie.sbcorder.common.enums.StatusEnum;
+import com.crossoverJie.sbcorder.common.exception.SBCException;
 import com.crossoverJie.sbcorder.common.res.BaseResponse;
+import com.crossoverJie.sbcorder.common.util.StringUtil;
 import com.crossoverJie.sbcuser.req.OrderNoReq;
 import com.crossoverJie.sbcuser.res.UserRes;
 import com.crossoverJie.user.api.UserService;
+import com.crossoverJie.user.vo.req.CreateOrderUserReqVO;
 import com.crossoverJie.user.vo.req.UserReqVO;
 import com.crossoverJie.user.vo.res.UserResVO;
 import com.google.common.util.concurrent.RateLimiter;
@@ -22,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -46,6 +53,16 @@ public class UserController implements UserService {
 
     @Resource(name = "concurrentTestThread")
     private ExecutorService executorService;
+
+    /** 模拟用户存储 */
+    private static final Map<Long, String> USER_STORE = new HashMap<>();
+    static {
+        USER_STORE.put(1L, "张三");
+        USER_STORE.put(2L, "李四");
+        USER_STORE.put(3L, "王五");
+        USER_STORE.put(1001L, "赵六");
+        USER_STORE.put(1002L, "孙七");
+    }
 
 
     @Override
@@ -126,6 +143,42 @@ public class UserController implements UserService {
         vo.setReqNo(userReqVO.getReqNo());
         BaseResponse<OrderNoResVO> orderNo = orderServiceClient.getOrderNo(vo);
         return orderNo;
+    }
+
+    @Override
+    public BaseResponse<OrderDetailResVO> createOrder(@RequestBody CreateOrderUserReqVO createOrderUserReqVO) {
+        logger.info("用户下单请求，userId={}，reqNo={}", createOrderUserReqVO.getUserId(), createOrderUserReqVO.getReqNo());
+
+        // 请求号校验
+        if (StringUtil.isEmpty(createOrderUserReqVO.getReqNo())) {
+            throw new SBCException(StatusEnum.REQ_NO_MISSING);
+        }
+
+        // 用户存在性校验
+        Long userId = createOrderUserReqVO.getUserId();
+        if (userId == null || !USER_STORE.containsKey(userId)) {
+            throw new SBCException(StatusEnum.USER_NOT_FOUND);
+        }
+
+        // 构建订单服务请求
+        CreateOrderReqVO orderReq = new CreateOrderReqVO();
+        orderReq.setReqNo(createOrderUserReqVO.getReqNo());
+        orderReq.setUserId(userId);
+        orderReq.setProductName(createOrderUserReqVO.getProductName());
+        orderReq.setProductCount(createOrderUserReqVO.getProductCount());
+        orderReq.setPrice(createOrderUserReqVO.getPrice());
+
+        // 通过Feign调用订单服务（Hystrix降级由fallbackFactory处理）
+        BaseResponse<OrderDetailResVO> orderRes = orderServiceClient.createOrder(orderReq);
+
+        logger.info("订单服务返回：{}", JSON.toJSONString(orderRes));
+
+        // 透传reqNo
+        if (orderRes != null) {
+            orderRes.setReqNo(createOrderUserReqVO.getReqNo());
+        }
+
+        return orderRes;
     }
 
 

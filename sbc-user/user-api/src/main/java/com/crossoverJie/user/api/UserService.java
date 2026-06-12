@@ -1,7 +1,9 @@
 package com.crossoverJie.user.api;
 
 import com.crossoverJie.order.vo.res.OrderNoResVO;
+import com.crossoverJie.order.vo.res.OrderDetailResVO;
 import com.crossoverJie.sbcorder.common.res.BaseResponse;
+import com.crossoverJie.user.vo.req.CreateOrderUserReqVO;
 import com.crossoverJie.user.vo.req.UserReqVO;
 import com.crossoverJie.user.vo.res.UserResVO;
 import io.swagger.annotations.Api;
@@ -62,4 +64,13 @@ public interface UserService {
     @ApiOperation("hystrix容错调用")
     @RequestMapping(value = "/getUserByHystrix", method = RequestMethod.POST)
     BaseResponse<OrderNoResVO> getUserByHystrix(@RequestBody UserReqVO userReqVO) ;
+
+    /**
+     * 用户下单
+     * @param createOrderUserReqVO
+     * @return
+     */
+    @ApiOperation("用户下单")
+    @RequestMapping(value = "/createOrder", method = RequestMethod.POST)
+    BaseResponse<OrderDetailResVO> createOrder(@RequestBody CreateOrderUserReqVO createOrderUserReqVO) ;
 }

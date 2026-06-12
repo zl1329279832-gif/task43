@@ -24,6 +24,15 @@ public enum  StatusEnum {
 
     /** 请求限流 */
     REQUEST_LIMIT("6000", "请求限流"),
+
+    /** 用户不存在 */
+    USER_NOT_FOUND("7000", "用户不存在"),
+
+    /** 请求号缺失 */
+    REQ_NO_MISSING("7001", "请求号不能为空"),
+
+    /** 订单不存在 */
+    ORDER_NOT_FOUND("7002", "订单不存在"),
     ;
 
 
